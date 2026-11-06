@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#883b76">
+  <meta name="description" content="Завозябрь 06.11 — нажимай на ячейки и собирай бинго.">
+  <title>Завозябрь 06.11 · Бинго</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; color: #352332; background: #faf7f9; font-family: system-ui, sans-serif; }
+    main { max-width: 780px; margin: auto; padding: 20px 12px 32px; }
+    .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 16px; }
+    .hint { font-size: 14px; line-height: 1.5; margin: 0; }
+    #reset { padding: 10px 15px; border: 1px solid #dbc8d6; border-radius: 99px; color: #753365; background: white; cursor: pointer; font: inherit; font-size: 14px; }
+    #reset:hover { background: #f3e7f0; }
+    .board { position: relative; margin-top: 4px; }
+    .board img { display: block; width: 100%; height: auto; border-radius: 18px; }
+    .cell { position: absolute; border: 0; border-radius: 3px; padding: 0; background: transparent; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+    .cell:hover { background: rgb(136 59 118 / 8%); }
+    .cell[aria-pressed="true"] { background: rgb(136 59 118 / 19%); }
+    .cell[aria-pressed="true"]::before, .cell[aria-pressed="true"]::after { content: ""; position: absolute; left: 9%; top: calc(50% - 2px); width: 82%; height: 4px; border-radius: 9px; background: #883b76; transform: rotate(42deg); box-shadow: 0 0 2px white; }
+    .cell[aria-pressed="true"]::after { transform: rotate(-42deg); }
+    .cell.free { cursor: default; }
+    .cell.free[aria-pressed="true"] { background: rgb(136 59 118 / 8%); }
+    .cell.free::before, .cell.free::after { display: none; }
+    .cell.winner { background: rgb(63 158 101 / 24%); }
+    button:focus-visible { outline: 3px solid #492c91; outline-offset: -3px; z-index: 1; }
+    #status { min-height: 24px; text-align: center; margin: 12px 0 0; color: #753365; font-weight: 650; }
+    .note { text-align: center; font-size: 12px; color: #7d6a77; margin: 8px 0; }
+    @media (max-width: 480px) { main { padding: 14px 0 24px; } .hint { font-size: 12px; } #reset { font-size: 12px; } }
+  </style>
+</head>
+<body>
+<main aria-label="Завозябрь 06.11 — бинго">
+  <div class="toolbar">
+    <p class="hint">Тыкни на ячейку, чтобы зачеркнуть.<br>Ещё раз — чтобы снять отметку.</p>
+    <button id="reset" type="button">Сбросить</button>
+  </div>
+  <div class="board" id="board">
+    <img src="bingo.png" width="973" height="1280" alt="Бинго «Завозябрь 06.11». Подписи ячеек доступны на кнопках поверх картинки.">
+  </div>
+  <p id="status" role="status" aria-live="polite"></p>
+  <p class="note" id="note">Отметки сохраняются в этом браузере. Центр уже отмечен.</p>
+</main>
+<script>
+  const labels = [
+    'Спасибо за ОС, взяли в работу', 'Сотрясание воздуха', 'Ебуреты', 'Искажение предложения с сигнала', 'Упоминание студсовета',
+    'Илюшин вспомнит DL', 'Яковлев откроет рот больше 1 раза', 'Придет >= 5 фриков (тау, Ксю...)', 'Упоминание отчисления', 'Артемий Уваров говорит на английском',
+    'Исказить смысл фразы', 'А вот когда будете работать...', 'Свободная ячейка', 'Стельмах упомянет самбадиса', 'Кривая аналогия',
+    'Уважаемые студенты, вы зажрались', 'Сообщения в центре событий', 'Блокеры с КР не снимут', 'Мы всегда готовы помочь, приходи', 'Завозики',
+    'А вот на физтехе...', 'Упоминание чечела', 'Дорешек не будет', 'Упоминание тьюторов', 'Упоминание жёлтой карточки'
+  ];
+  const storageKey = 'zavozyabr-2026-11-06-bingo-v1';
+  let marked = new Set([12]);
+  let storageAvailable = true;
+  try {
+    const saved = JSON.parse(localStorage.getItem(storageKey) || '[]');
+    if (Array.isArray(saved)) saved.forEach(i => { if (Number.isInteger(i) && i >= 0 && i < 25) marked.add(i); });
+  } catch { storageAvailable = false; }
+  const xs = [49, 224, 400, 575, 750, 924];
+  const ys = [229, 411, 639, 825, 1052, 1226];
+  const buttons = labels.map((label, i) => {
+    const button = document.createElement('button');
+    const row = Math.floor(i / 5), col = i % 5;
+    button.type = 'button';
+    button.className = 'cell' + (i === 12 ? ' free' : '');
+    button.setAttribute('aria-label', label);
+    button.title = label;
+    if (i === 12) button.setAttribute('aria-disabled', 'true');
+    button.style.left = (xs[col] / 973 * 100) + '%';
+    button.style.top = (ys[row] / 1280 * 100) + '%';
+    button.style.width = ((xs[col + 1] - xs[col]) / 973 * 100) + '%';
+    button.style.height = ((ys[row + 1] - ys[row]) / 1280 * 100) + '%';
+    button.addEventListener('click', () => {
+      if (i === 12) return;
+      marked.has(i) ? marked.delete(i) : marked.add(i);
+      save(); render();
+    });
+    document.getElementById('board').append(button);
+    return button;
+  });
+  const lines = [];
+  for (let i = 0; i < 5; i++) {
+    lines.push(Array.from({length: 5}, (_, j) => i * 5 + j));
+    lines.push(Array.from({length: 5}, (_, j) => j * 5 + i));
+  }
+  lines.push([0, 6, 12, 18, 24], [4, 8, 12, 16, 20]);
+  function save() {
+    try { localStorage.setItem(storageKey, JSON.stringify([...marked])); storageAvailable = true; }
+    catch { storageAvailable = false; }
+  }
+  function render() {
+    const complete = lines.filter(line => line.every(i => marked.has(i)));
+    const winners = new Set(complete.flat());
+    buttons.forEach((button, i) => {
+      button.setAttribute('aria-pressed', String(marked.has(i)));
+      button.classList.toggle('winner', winners.has(i));
+    });
+    document.getElementById('status').textContent = complete.length
+      ? 'Бинго! 🎉 Собрано линий: ' + complete.length
+      : 'Отмечено: ' + (marked.size - 1) + ' из 24';
+    document.getElementById('note').textContent = storageAvailable
+      ? 'Отметки сохраняются в этом браузере. Центр уже отмечен.'
+      : 'Сохранение недоступно в этом браузере. Центр уже отмечен.';
+  }
+  document.getElementById('reset').addEventListener('click', () => {
+    if (marked.size > 1 && window.confirm('Сбросить все отметки и начать заново?')) {
+      marked = new Set([12]); save(); render();
+    }
+  });
+  render();
+</script>
+</body>
+</html>
